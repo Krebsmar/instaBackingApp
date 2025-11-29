@@ -120,3 +120,10 @@ Bei zu vielen Likes kann Instagram den Account temporär sperren. Erhöhe in die
 ## Lizenz
 
 MIT License - Verwendung auf eigenes Risiko.
+
+
+docker-compose down
+docker rmi -f insta-backing-app:latest
+docker-compose build --no-cache
+docker-compose up -d
+docker-compose logs -f
