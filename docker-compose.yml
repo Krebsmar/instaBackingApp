@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  instagram-auto-liker:
+    build: .
+    container_name: instagram-auto-liker
+    restart: unless-stopped
+    
+    # Umgebungsvariablen für Instagram-Credentials
+    environment:
+      - IG_TARGET=${IG_TARGET}           # Zielaccount (ohne @)
+      - IG_USERNAME=${IG_USERNAME}       # Dein Instagram-Username
+      - IG_PASSWORD=${IG_PASSWORD}       # Dein Instagram-Passwort
+      - IG_CYCLE=${IG_CYCLE:-3600}       # Zykluszeit in Sekunden (Standard: 1h)
+      - IG_DELAY=${IG_DELAY:-2.0}        # Verzögerung zwischen Likes
+      - IG_MAX_LIKES=${IG_MAX_LIKES:-50} # Max Likes pro Zyklus
+      - TZ=${TZ:-Europe/Berlin}          # Zeitzone
+    
+    # Persistente Daten
+    volumes:
+      - ./data:/app/data
+    
+    # Logging-Konfiguration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Optional: Ressourcenlimits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
