@@ -1,51 +1,71 @@
-# Instagram Auto-Liker Dockerfile
-# Basis-Image: Python 3.11 slim für kleinere Größe
-FROM python:3.11-slim
+# =============================================================================
+# instaBackingApp Dockerfile
+# Multi-stage build for minimal image size
+# =============================================================================
 
-# Maintainer-Info
-LABEL maintainer="Instagram Auto-Liker"
-LABEL description="Automatisches Liken von Instagram Stories, Posts und Reels"
+# -----------------------------------------------------------------------------
+# Stage 1: Builder
+# -----------------------------------------------------------------------------
+FROM python:3.11-slim as builder
 
-# Arbeitsverzeichnis setzen
-WORKDIR /app
+WORKDIR /build
 
-# System-Abhängigkeiten installieren (für Pillow und andere Bibliotheken)
+# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    libjpeg-dev \
-    zlib1g-dev \
-    libpng-dev \
+    libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Python-Abhängigkeiten kopieren und installieren
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Anwendungscode kopieren
-COPY instagram_auto_liker.py .
+# Install dependencies
+COPY pyproject.toml .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir .
 
-# Datenverzeichnis erstellen
-RUN mkdir -p /app/data
+# -----------------------------------------------------------------------------
+# Stage 2: Runtime
+# -----------------------------------------------------------------------------
+FROM python:3.11-slim as runtime
 
-# Volume für persistente Daten (Session, Liked-Items)
+# Labels
+LABEL org.opencontainers.image.title="instaBackingApp"
+LABEL org.opencontainers.image.description="Automatisierter Instagram-Backing-Service"
+LABEL org.opencontainers.image.version="1.0.0"
+
+# Create non-root user
+RUN groupadd --gid 1000 appgroup && \
+    useradd --uid 1000 --gid appgroup --shell /bin/bash --create-home appuser
+
+# Set working directory
+WORKDIR /app
+
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy application code
+COPY src/insta_backing_app /app/insta_backing_app
+
+# Create data directory
+RUN mkdir -p /app/data && chown -R appuser:appgroup /app
+
+# Switch to non-root user
+USER appuser
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV DATABASE_URL=sqlite:///data/insta_backing.db
+
+# Health check
+HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
+    CMD python -c "import sys; sys.exit(0)"
+
+# Volume for persistent data
 VOLUME ["/app/data"]
 
-# Umgebungsvariablen (können beim Container-Start überschrieben werden)
-ENV IG_TARGET=""
-ENV IG_USERNAME=""
-ENV IG_PASSWORD=""
-ENV IG_CYCLE="3600"
-ENV IG_DATA_DIR="/app/data"
-ENV IG_DELAY="2.0"
-ENV IG_MAX_LIKES="50"
-ENV PYTHONUNBUFFERED="1"
-
-# Health-Check (optional)
-HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
-    CMD python -c "import os; exit(0 if os.path.exists('/app/data/session.json') else 1)" || exit 0
-
-# Startbefehl
-ENTRYPOINT ["python", "instagram_auto_liker.py"]
-
-# Standard-CMD kann überschrieben werden
-CMD []
+# Entry point
+ENTRYPOINT ["python", "-m", "insta_backing_app"]

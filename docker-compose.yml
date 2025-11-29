@@ -1,38 +1,54 @@
-version: '3.8'
+# =============================================================================
+# instaBackingApp - Docker Compose Configuration
+# =============================================================================
+# Verwendung:
+#   1. cp .env.example .env
+#   2. .env bearbeiten und Credentials eintragen
+#   3. docker-compose up -d
+#   4. docker-compose logs -f
+# =============================================================================
 
 services:
-  instagram-auto-liker:
-    build: .
-    container_name: instagram-auto-liker
+  insta-backing-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: insta-backing-app:latest
+    container_name: insta-backing-app
     restart: unless-stopped
-    
-    # Umgebungsvariablen für Instagram-Credentials
-    environment:
-      - IG_TARGET=${IG_TARGET}           # Zielaccount (ohne @)
-      - IG_USERNAME=${IG_USERNAME}       # Dein Instagram-Username
-      - IG_PASSWORD=${IG_PASSWORD}       # Dein Instagram-Passwort
-      - IG_CYCLE=${IG_CYCLE:-3600}       # Zykluszeit in Sekunden (Standard: 1h)
-      - IG_DELAY=${IG_DELAY:-2.0}        # Verzögerung zwischen Likes
-      - IG_MAX_LIKES=${IG_MAX_LIKES:-50} # Max Likes pro Zyklus
-      - TZ=${TZ:-Europe/Berlin}          # Zeitzone
-    
-    # Persistente Daten
+
+    # Umgebungsvariablen aus .env Datei
+    env_file:
+      - .env
+
+    # Persistenter Speicher für Datenbank und Sessions
     volumes:
-      - ./data:/app/data
-    
+      - insta-backing-data:/app/data
+
     # Logging-Konfiguration
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
-    
-    # Optional: Ressourcenlimits
+
+    # Health Check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 5m
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+    # Ressourcen-Limits (optional)
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 256M
+          memory: 512M
         reservations:
-          cpus: '0.1'
           memory: 128M
+
+# Persistentes Volume
+volumes:
+  insta-backing-data:
+    name: insta-backing-data
