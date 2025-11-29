@@ -1,5 +1,7 @@
 """Service for managing target accounts."""
 
+from datetime import datetime, timezone
+
 from insta_backing_app.config import get_settings
 from insta_backing_app.logging_config import get_logger
 from insta_backing_app.models import TargetAccount, get_db_session

@@ -1,8 +1,8 @@
 """SQLAlchemy base model and database setup."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, create_engine, func
+from sqlalchemy import DateTime, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 from insta_backing_app.config import get_settings
@@ -10,7 +10,6 @@ from insta_backing_app.config import get_settings
 
 class Base(DeclarativeBase):
     """Base class for all models."""
-
     pass
 
 
@@ -19,18 +18,17 @@ class TimestampMixin:
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
+        default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
 
 
-# Global engine and session factory
 _engine = None
 _SessionFactory = None
 
