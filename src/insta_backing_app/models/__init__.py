@@ -1,6 +1,6 @@
 """Database models."""
 
-from insta_backing_app.models.base import Base, get_db_session, get_engine, init_db
+from insta_backing_app.models.base import Base, TZDateTime, get_db_session, get_engine, init_db
 from insta_backing_app.models.post import Post
 from insta_backing_app.models.rate_limit import RateLimitCounter
 from insta_backing_app.models.session import SessionData
@@ -14,6 +14,7 @@ __all__ = [
     "SessionData",
     "Story",
     "TargetAccount",
+    "TZDateTime",
     "get_db_session",
     "get_engine",
     "init_db",

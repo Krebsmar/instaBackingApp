@@ -2,10 +2,10 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from insta_backing_app.models.base import Base, TimestampMixin
+from insta_backing_app.models.base import Base, TimestampMixin, TZDateTime
 
 
 class TargetAccount(Base, TimestampMixin):
@@ -18,8 +18,8 @@ class TargetAccount(Base, TimestampMixin):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     process_stories: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     process_posts: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    last_story_check: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_post_check: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_story_check: Mapped[datetime | None] = mapped_column(TZDateTime(timezone=True), nullable=True)
+    last_post_check: Mapped[datetime | None] = mapped_column(TZDateTime(timezone=True), nullable=True)
     error_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 

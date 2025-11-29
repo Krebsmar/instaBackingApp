@@ -1,11 +1,11 @@
 """Story model for Instagram stories."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Index, String
+from sqlalchemy import Boolean, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from insta_backing_app.models.base import Base
+from insta_backing_app.models.base import Base, TZDateTime
 
 
 class Story(Base):
@@ -16,13 +16,13 @@ class Story(Base):
     story_pk: Mapped[str] = mapped_column(String(64), primary_key=True)
     story_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     target_username: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    taken_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    taken_at: Mapped[datetime] = mapped_column(TZDateTime(timezone=True), nullable=False)
     liked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    liked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    liked_at: Mapped[datetime | None] = mapped_column(TZDateTime(timezone=True), nullable=True)
     processed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        TZDateTime(timezone=True),
         nullable=False,
-        default=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
     )
 
     __table_args__ = (
