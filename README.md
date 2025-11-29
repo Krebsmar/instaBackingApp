@@ -1,128 +1,221 @@
-# Instagram Auto-Liker
+# instaBackingApp
 
-Automatisches Liken von Stories, Posts und Reels eines Instagram-Zielaccounts.
+**Automatisierter Instagram-Backing-Service für Story- und Post-Interaktionen**
 
-## ⚠️ Wichtiger Hinweis
+---
 
-Die Nutzung dieses Scripts kann gegen Instagram's Nutzungsbedingungen verstoßen und zu Account-Sperrungen führen. Verwendung auf eigenes Risiko!
+## 🎯 Projekt-Hintergrund
 
-## Features
+Dieses Projekt demonstriert einen modernen Entwicklungsansatz, bei dem **fundiertes Requirements Engineering und Architekturdesign** mit **AI-gestütztem Vibe Coding** kombiniert werden, um schnell einen funktionsfähigen MVP zu realisieren.
 
-- Automatisches Liken von Posts und Reels
-- Stories werden als "gesehen" markiert
-- Speicherung bereits verarbeiteter Items (keine Duplikate)
-- Session-Persistenz für weniger Logins
-- Konfigurierbarer Zykluszeitraum
-- Rate-Limiting zum Schutz vor Instagram-Sperren
-- Docker-Support für einfaches Deployment
+### Mein Beitrag: Anforderungen & Architektur
 
-## Installation
+Die konzeptionelle Grundlage wurde von mir nach **ISAQB-Standards** erarbeitet:
 
-### Option 1: Docker (Empfohlen)
+- **Requirements Engineering** — Systematische Analyse funktionaler und nicht-funktionaler Anforderungen
+- **Arc42-Architekturdokumentation** — Strukturierte Dokumentation aller Architekturentscheidungen
+- **Qualitätsattribute** — Definition von Zuverlässigkeit, Sicherheit und Wartbarkeit
+- **Technische Constraints** — Auswahl geeigneter Technologien und Patterns
+
+Die vollständige Dokumentation findet sich in:
+- [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md) — Anforderungsspezifikation
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Architekturübersicht
+- [`docs/arc42/`](docs/arc42/) — Arc42-Dokumentation
+
+### Vibe Coding: Vom Konzept zum MVP
+
+Basierend auf meiner Architektur- und Anforderungsdokumentation wurde **Vibe Coding** eingesetzt — ein AI-gestützter Entwicklungsansatz, bei dem:
+
+1. **Klare Spezifikationen** als Input dienen (meine Dokumentation)
+2. **AI-Assistenz** (Claude) den Code generiert und iterativ verfeinert
+3. **Schnelle Feedback-Loops** Bugs direkt im Dialog beheben
+4. **Der Entwickler** als Architekt und Reviewer fungiert
+
+> **Ergebnis:** Ein produktionsreifer MVP in wenigen Stunden statt Tagen — ohne Kompromisse bei der Architekturqualität.
+
+---
+
+## ✨ Features
+
+- **Multi-Account Support** — Mehrere Zielaccounts parallel überwachen
+- **Story & Post Processing** — Automatisches Liken von Stories und Beiträgen
+- **Intelligentes Rate-Limiting** — Konservative Limits mit Jitter für menschliches Verhalten
+- **Session-Persistenz** — Login-Session überlebt Container-Neustarts
+- **Exponentielles Backoff** — Automatische Fehlerbehandlung bei API-Limits
+- **Structured Logging** — JSON-Logs für einfache Analyse
+- **12-Factor Compliance** — Cloud-native Architektur
+
+---
+
+## 🏗️ Architektur
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     instaBackingApp                          │
+├─────────────────────────────────────────────────────────────┤
+│  Scheduler (APScheduler)                                     │
+│    ├── Main Processing Cycle (stündlich)                    │
+│    └── Session Keep-Alive (30 Min)                          │
+├─────────────────────────────────────────────────────────────┤
+│  Services                                                    │
+│    ├── ProcessingOrchestrator  → Koordiniert Abläufe        │
+│    ├── InstagramClient         → API-Wrapper (instagrapi)   │
+│    ├── StoryService            → Story-Verarbeitung         │
+│    ├── PostService             → Post-Verarbeitung          │
+│    ├── AccountManager          → Zielaccount-Verwaltung     │
+│    └── RateLimiter             → Request-/Like-Limits       │
+├─────────────────────────────────────────────────────────────┤
+│  Repositories (Data Access Layer)                           │
+│    ├── StoryRepository         │ SessionRepository          │
+│    ├── PostRepository          │ RateLimitRepository        │
+│    └── TargetAccountRepository                              │
+├─────────────────────────────────────────────────────────────┤
+│  Models (SQLAlchemy ORM)                                    │
+│    Story │ Post │ SessionData │ RateLimitCounter │ Target   │
+├─────────────────────────────────────────────────────────────┤
+│  SQLite / PostgreSQL                                        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🚀 Quick Start
+
+### 1. Repository klonen
 
 ```bash
-# Repository klonen oder Dateien herunterladen
-cd instagram_auto_liker
+git clone https://github.com/your-username/instaBackingApp.git
+cd instaBackingApp
+```
 
-# .env Datei erstellen
+### 2. Konfiguration erstellen
+
+```bash
 cp .env.example .env
-# .env Datei bearbeiten und Credentials eintragen
+```
 
-# Container starten
+Bearbeite `.env` mit deinen Zugangsdaten:
+
+```env
+# Pflichtangaben
+IG_USERNAME=dein_instagram_username
+IG_PASSWORD=dein_instagram_passwort
+IG_TARGET_USERNAMES=account1,account2,account3
+```
+
+### 3. Starten
+
+```bash
 docker-compose up -d
+```
 
-# Logs anzeigen
+### 4. Logs beobachten
+
+```bash
 docker-compose logs -f
 ```
 
-### Option 2: Direkt mit Python
+---
+
+## ⚙️ Konfiguration
+
+| Variable | Default | Beschreibung |
+|----------|---------|--------------|
+| `IG_USERNAME` | — | Instagram Benutzername (Pflicht) |
+| `IG_PASSWORD` | — | Instagram Passwort (Pflicht) |
+| `IG_TARGET_USERNAMES` | — | Kommaseparierte Zielaccounts (Pflicht) |
+| `IG_CYCLE_SECONDS` | `3600` | Intervall zwischen Zyklen |
+| `IG_MAX_LIKES_PER_HOUR` | `40` | Maximale Likes pro Stunde |
+| `IG_MAX_LIKES_PER_DAY` | `800` | Maximale Likes pro Tag |
+| `LOG_LEVEL` | `INFO` | Log-Level (DEBUG, INFO, WARNING, ERROR) |
+| `LOG_FORMAT` | `json` | Log-Format (json, text) |
+
+Siehe [`.env.example`](.env.example) für alle Optionen.
+
+---
+
+## 🛠️ Entwicklung
+
+### Lokale Installation
 
 ```bash
-# Abhängigkeiten installieren
-pip install -r requirements.txt
-
-# Programm starten
-python instagram_auto_liker.py \
-  -t zielaccount \
-  -u mein_username \
-  -p mein_passwort \
-  -c 3600
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
 ```
 
-## Konfiguration
+### Ausführen
 
-### Kommandozeilenargumente
-
-| Argument | Beschreibung | Standard |
-|----------|--------------|----------|
-| `-t, --target` | Zielaccount (ohne @) | - |
-| `-u, --username` | Dein Instagram-Username | - |
-| `-p, --password` | Dein Instagram-Passwort | - |
-| `-c, --cycle` | Zykluszeit in Sekunden | 3600 |
-| `--no-stories` | Stories nicht verarbeiten | false |
-| `--no-posts` | Posts nicht verarbeiten | false |
-| `--no-reels` | Reels nicht verarbeiten | false |
-| `--delay` | Verzögerung zwischen Likes (Sek) | 2.0 |
-| `--max-likes` | Max Likes pro Zyklus | 50 |
-| `--data-dir` | Datenverzeichnis | ./data |
-| `-v, --verbose` | Ausführliche Ausgabe | false |
-
-### Umgebungsvariablen
-
-| Variable | Beschreibung |
-|----------|--------------|
-| `IG_TARGET` | Zielaccount |
-| `IG_USERNAME` | Dein Username |
-| `IG_PASSWORD` | Dein Passwort |
-| `IG_CYCLE` | Zykluszeit |
-| `IG_DELAY` | Verzögerung |
-| `IG_MAX_LIKES` | Max Likes |
-| `IG_DATA_DIR` | Datenverzeichnis |
-
-## Datenstruktur
-
-```
-data/
-├── session.json      # Instagram-Session (für persistenten Login)
-└── liked_items.json  # Liste bereits verarbeiteter Items
+```bash
+python -m insta_backing_app
 ```
 
-## Empfohlene Einstellungen
+### Tests
 
-Für sicheren Betrieb empfehlen wir:
+```bash
+pytest
+```
 
-- **Zykluszeit**: Mindestens 1800 Sekunden (30 Min)
-- **Verzögerung**: Mindestens 2 Sekunden zwischen Likes
-- **Max Likes**: Nicht mehr als 50 pro Zyklus
+---
 
-## Troubleshooting
+## 📁 Projektstruktur
 
-### Zwei-Faktor-Authentifizierung (2FA)
+```
+instaBackingApp/
+├── src/insta_backing_app/
+│   ├── __main__.py          # Entry Point
+│   ├── config.py            # Pydantic Settings
+│   ├── logging_config.py    # structlog Setup
+│   ├── models/              # SQLAlchemy Models
+│   ├── repositories/        # Data Access Layer
+│   └── services/            # Business Logic
+├── docs/
+│   ├── REQUIREMENTS.md      # Anforderungsdokumentation
+│   ├── ARCHITECTURE.md      # Architekturübersicht
+│   └── arc42/               # Arc42-Dokumentation
+├── Dockerfile               # Multi-Stage Build
+├── docker-compose.yml
+├── pyproject.toml
+└── .env.example
+```
 
-Falls 2FA aktiviert ist, muss diese temporär deaktiviert werden oder ein App-spezifisches Passwort verwendet werden.
+---
 
-### Challenge Required
+## 📊 Technologie-Stack
 
-Instagram kann bei verdächtigen Aktivitäten eine Verifizierung anfordern. In diesem Fall:
+| Komponente | Technologie |
+|------------|-------------|
+| Sprache | Python 3.11+ |
+| Instagram API | instagrapi |
+| ORM | SQLAlchemy 2.x |
+| Konfiguration | Pydantic Settings |
+| Scheduler | APScheduler |
+| Logging | structlog |
+| Container | Docker |
 
-1. Im Browser bei Instagram einloggen
-2. Verifizierung abschließen
-3. Script neu starten
+---
 
-### Rate Limiting
+## ⚠️ Disclaimer
 
-Bei zu vielen Likes kann Instagram den Account temporär sperren. Erhöhe in diesem Fall:
+Dieses Projekt dient Lern- und Demonstrationszwecken. Die Nutzung automatisierter Tools kann gegen die Instagram-Nutzungsbedingungen verstoßen. Verwende dieses Tool verantwortungsvoll und auf eigenes Risiko.
 
-- Die Zykluszeit (`--cycle`)
-- Die Verzögerung (`--delay`)
-- Reduziere Max Likes (`--max-likes`)
+---
 
-## Lizenz
+## 📄 Lizenz
 
-MIT License - Verwendung auf eigenes Risiko.
+MIT License — siehe [LICENSE](LICENSE)
 
+---
+
+## 🙏 Entstehung
+
+**Konzept & Architektur:** Mario Krebs  
+**Implementierung:** AI-gestütztes Vibe Coding mit Claude (Anthropic)
+
+> *"Gute Architektur ist die Grundlage für erfolgreiche AI-Assistenz. Vibe Coding funktioniert am besten, wenn der Mensch das 'Was' und 'Warum' definiert — und die AI beim 'Wie' unterstützt."*
 
 docker-compose down
+docker volume rm insta-backing-data
 docker rmi -f insta-backing-app:latest
 docker-compose build --no-cache
 docker-compose up -d
