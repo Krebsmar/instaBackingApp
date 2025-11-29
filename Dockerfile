@@ -22,6 +22,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Install dependencies
 COPY pyproject.toml .
+COPY README.md .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir .
 
