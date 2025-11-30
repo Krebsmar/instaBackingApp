@@ -1,6 +1,7 @@
 """Instagram client wrapper using instagrapi."""
 
 import json
+import logging
 import time
 from datetime import datetime, timezone
 from typing import Any, Callable, TypeVar
@@ -57,6 +58,10 @@ class InstagramClient:
     def _create_client(self) -> Client:
         client = Client()
         client.delay_range = [1, 3]
+        # Silence instagrapi's verbose request loggers
+        client.logger.setLevel(logging.ERROR)
+        client.private_request_logger.setLevel(logging.ERROR)
+        client.public_request_logger.setLevel(logging.ERROR)
         return client
 
     def _load_session(self) -> bool:
