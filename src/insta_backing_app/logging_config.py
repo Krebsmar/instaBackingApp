@@ -10,6 +10,14 @@ from structlog.typing import Processor
 from insta_backing_app.config import get_settings
 
 
+def _drop_exc_info(
+    logger: logging.Logger, method_name: str, event_dict: dict[str, Any]
+) -> dict[str, Any]:
+    """Remove exc_info from log events to prevent stacktrace spam."""
+    event_dict.pop("exc_info", None)
+    return event_dict
+
+
 def configure_logging() -> None:
     """Configure structured logging based on settings."""
     settings = get_settings()
@@ -20,6 +28,7 @@ def configure_logging() -> None:
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.stdlib.ExtraAdder(),
+        _drop_exc_info,  # Remove exc_info to prevent stacktrace spam
     ]
 
     if settings.log_format == "json":
