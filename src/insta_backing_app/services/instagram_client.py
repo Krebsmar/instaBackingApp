@@ -3,7 +3,7 @@
 import json
 import time
 from datetime import datetime, timezone
-from typing import Callable, TypeVar
+from typing import Any, Callable, TypeVar
 
 from instagrapi import Client
 from instagrapi.exceptions import (
@@ -13,6 +13,7 @@ from instagrapi.exceptions import (
     RateLimitError,
 )
 from instagrapi.types import Media, Story
+from pydantic import ValidationError
 
 from insta_backing_app.config import get_settings
 from insta_backing_app.logging_config import get_logger
@@ -234,6 +235,24 @@ class InstagramClient:
         self.rate_limiter.record_request()
         return stories
 
+    def _fetch_medias_raw(self, user_id: str, amount: int) -> list[dict[str, Any]]:
+        """Fetch raw media data from private API without parsing."""
+        medias = []
+        end_cursor = None
+        while len(medias) < amount:
+            result = self._client.private_request(
+                f"feed/user/{user_id}/",
+                params={"max_id": end_cursor, "count": min(amount - len(medias), 12)},
+            )
+            items = result.get("items", [])
+            if not items:
+                break
+            medias.extend(items)
+            end_cursor = result.get("next_max_id")
+            if not end_cursor:
+                break
+        return medias[:amount]
+
     def get_user_medias(self, user_id: str, amount: int = 20) -> list[Media]:
         self.ensure_logged_in()
 
@@ -255,9 +274,29 @@ class InstagramClient:
                         self._handle_graphql_error()
                     else:
                         raise
+                except ValidationError:
+                    logger.debug("GraphQL parsing failed, using private API")
+                    self._handle_graphql_error()
 
-            # Use private API directly
-            return self._client.user_medias_v1(user_id, amount=amount)
+            # Use private API with graceful error handling
+            try:
+                return self._client.user_medias_v1(user_id, amount=amount)
+            except ValidationError:
+                # Pydantic can't parse some media types (Reels), fetch raw and parse individually
+                logger.warning("Media parsing error, fetching individually", user_id=user_id)
+                raw_items = self._fetch_medias_raw(user_id, amount)
+                parsed_medias = []
+                for item in raw_items:
+                    try:
+                        media = Media(**self._client._extract_media_v1(item))
+                        parsed_medias.append(media)
+                    except ValidationError:
+                        # Skip unparseable items (Reels with missing fields)
+                        media_type = item.get("media_type", "unknown")
+                        product_type = item.get("product_type", "")
+                        logger.debug("Skipping unparseable media", media_type=media_type, product_type=product_type)
+                        continue
+                return parsed_medias
 
         medias = self._with_relogin(_fetch)
         self.rate_limiter.record_request()

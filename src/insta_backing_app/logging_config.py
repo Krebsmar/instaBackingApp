@@ -57,6 +57,8 @@ def configure_logging() -> None:
     # Silence noisy loggers
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("instagrapi").setLevel(logging.WARNING)
+    logging.getLogger("pydantic").setLevel(logging.ERROR)
 
 
 def get_logger(name: str) -> Any:

@@ -7,7 +7,10 @@
       "Bash(python:*)",
       "Bash(set:*)",
       "Bash($env:PYTHONPATH=\"src\")",
-      "Bash(code:*)"
+      "Bash(code:*)",
+      "Bash(git push:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nFix Pydantic ValidationError for Reels and reduce log spam\n\n- Catch ValidationError in get_user_medias and parse items individually\n- Fetch raw media data when parsing fails, skip unparseable items\n- Silence instagrapi and pydantic loggers to reduce noise\n- Skip Reels that can''t be parsed due to missing fields\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []
