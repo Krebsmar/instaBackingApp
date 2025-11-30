@@ -47,3 +47,8 @@ class PostRepository:
         """Get all unliked posts."""
         stmt = select(Post).where(Post.liked == False)
         return list(self.db.execute(stmt).scalars().all())
+
+    def has_posts_for_user(self, username: str) -> bool:
+        """Check if any posts exist for a target username."""
+        stmt = select(Post.media_pk).where(Post.target_username == username).limit(1)
+        return self.db.execute(stmt).scalar() is not None

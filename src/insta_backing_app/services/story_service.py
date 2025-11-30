@@ -2,6 +2,8 @@
 
 from datetime import datetime, timezone
 
+from pydantic import ValidationError
+
 from insta_backing_app.logging_config import get_logger
 from insta_backing_app.models import Story, get_db_session
 from insta_backing_app.repositories import StoryRepository
@@ -26,12 +28,15 @@ class StoryService:
     def process_stories(self, username: str, user_id: str) -> dict:
         """Process stories for a user. Returns stats."""
         stats = {"fetched": 0, "new": 0, "liked": 0, "skipped": 0, "errors": 0}
-        
+
         logger.info("Processing stories", username=username)
-        
+
         try:
             stories = self.client.get_user_stories(user_id)
             stats["fetched"] = len(stories)
+        except ValidationError:
+            logger.warning("Skipping stories due to parsing error", username=username)
+            return stats
         except InstagramRateLimitError:
             logger.warning("Rate limit reached while fetching stories", username=username)
             return stats
@@ -47,8 +52,12 @@ class StoryService:
         repo = self._get_repo()
 
         for story in stories:
-            story_pk = str(story.pk)
-            
+            try:
+                story_pk = str(story.pk)
+            except (ValidationError, AttributeError):
+                logger.warning("Skipping story due to parsing error", username=username)
+                continue
+
             # Check if already processed
             if repo.exists(story_pk):
                 logger.debug("Story already processed", story_pk=story_pk)

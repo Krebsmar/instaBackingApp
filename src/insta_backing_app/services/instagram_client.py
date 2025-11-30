@@ -1,7 +1,9 @@
 """Instagram client wrapper using instagrapi."""
 
 import json
+import time
 from datetime import datetime, timezone
+from typing import Callable, TypeVar
 
 from instagrapi import Client
 from instagrapi.exceptions import (
@@ -19,6 +21,8 @@ from insta_backing_app.repositories import SessionRepository
 from insta_backing_app.services.rate_limiter import RateLimiter
 
 logger = get_logger(__name__)
+
+T = TypeVar("T")
 
 
 class InstagramClientError(Exception):
@@ -43,6 +47,8 @@ class InstagramClient:
         self.rate_limiter = rate_limiter
         self._client: Client | None = None
         self._user_id_cache: dict[str, str] = {}
+        self._graphql_failures: int = 0
+        self._graphql_disabled_until: float = 0
 
     def _get_session_repo(self) -> SessionRepository:
         return SessionRepository(get_db_session())
@@ -54,9 +60,10 @@ class InstagramClient:
 
     def _load_session(self) -> bool:
         repo = self._get_session_repo()
-        session_data = repo.get_by_username(self.settings.ig_username)
+        session_data = repo.get_valid_session(self.settings.ig_username)
 
         if session_data is None:
+            logger.debug("No valid session found in database")
             return False
 
         try:
@@ -64,11 +71,34 @@ class InstagramClient:
             settings = json.loads(session_data.session_json)
             self._client.set_settings(settings)
             self._client.login(self.settings.ig_username, self.settings.ig_password)
-            logger.info("Session loaded from database", username=self.settings.ig_username)
+
+            # Validate session with a test request
+            if not self._validate_session():
+                logger.warning("Loaded session invalid, performing fresh login")
+                repo.invalidate(self.settings.ig_username)
+                self._client = None
+                return False
+
+            logger.info("Session loaded and validated", username=self.settings.ig_username)
             return True
         except Exception as e:
             logger.warning("Failed to load session", error=str(e))
+            repo.invalidate(self.settings.ig_username)
+            self._client = None
             return False
+
+    def _validate_session(self) -> bool:
+        """Validate session by making a test request."""
+        if self._client is None:
+            return False
+        try:
+            self._client.get_timeline_feed()
+            return True
+        except (LoginRequired, KeyError):
+            return False
+        except Exception:
+            # Other errors (rate limit, network) don't mean session is invalid
+            return True
 
     def _save_session(self) -> None:
         if self._client is None:
@@ -90,15 +120,47 @@ class InstagramClient:
                 self._save_session()
                 logger.info("Login successful", username=self.settings.ig_username)
                 return
-            except ChallengeRequired as e:
+            except ChallengeRequired:
+                self._invalidate_session()
                 raise InstagramChallengeError("Challenge required")
             except PleaseWaitFewMinutes:
                 self.rate_limiter.apply_backoff()
             except Exception as e:
                 logger.error("Login failed", attempt=attempt, error=str(e))
                 if attempt == self.settings.ig_max_login_attempts:
+                    self._invalidate_session()
                     raise InstagramLoginError(f"Login failed after {attempt} attempts: {e}")
                 self.rate_limiter.apply_backoff()
+
+    def _invalidate_session(self) -> None:
+        """Mark current session as invalid in database."""
+        try:
+            repo = self._get_session_repo()
+            repo.invalidate(self.settings.ig_username)
+        except Exception as e:
+            logger.warning("Failed to invalidate session", error=str(e))
+
+    def relogin(self) -> bool:
+        """Force a fresh login, invalidating the current session."""
+        logger.info("Performing relogin", username=self.settings.ig_username)
+        self._client = None
+        self._invalidate_session()
+        try:
+            self._fresh_login()
+            return True
+        except (InstagramLoginError, InstagramChallengeError) as e:
+            logger.error("Relogin failed", error=str(e))
+            return False
+
+    def _with_relogin(self, operation: Callable[[], T]) -> T:
+        """Execute operation with automatic relogin on session expiry."""
+        try:
+            return operation()
+        except LoginRequired:
+            logger.warning("Session expired, attempting relogin")
+            if self.relogin():
+                return operation()
+            raise InstagramLoginError("Session expired and relogin failed")
 
     def ensure_logged_in(self) -> None:
         if self._client is not None:
@@ -110,25 +172,48 @@ class InstagramClient:
         if isinstance(e, (RateLimitError, PleaseWaitFewMinutes)):
             raise InstagramRateLimitError(str(e))
         elif isinstance(e, ChallengeRequired):
+            self._invalidate_session()
             raise InstagramChallengeError(str(e))
         elif isinstance(e, LoginRequired):
             self._client = None
+            self._invalidate_session()
             raise InstagramLoginError("Session expired")
         else:
             raise InstagramClientError(str(e))
+
+    def _handle_graphql_error(self) -> None:
+        """Track GraphQL failures and disable if too many consecutive errors."""
+        self._graphql_failures += 1
+        if self._graphql_failures >= 3:
+            self._graphql_disabled_until = time.time() + 3600  # 1 hour
+            logger.debug("GraphQL disabled for 1 hour due to consecutive failures")
+
+    def _reset_graphql_failures(self) -> None:
+        """Reset GraphQL failure counter on success."""
+        self._graphql_failures = 0
+
+    def _is_graphql_available(self) -> bool:
+        """Check if GraphQL API is currently available."""
+        if time.time() > self._graphql_disabled_until:
+            return True
+        return False
 
     def get_user_id(self, username: str) -> str:
         if username in self._user_id_cache:
             return self._user_id_cache[username]
 
         self.ensure_logged_in()
-        
+
         if not self.rate_limiter.can_make_request():
             raise InstagramRateLimitError("Request limit reached")
 
         self.rate_limiter.wait_between_requests()
-        result = self._client.private_request(f"users/{username}/usernameinfo/")
-        user_id = str(result["user"]["pk"])
+
+        def _fetch() -> str:
+            result = self._client.private_request(f"users/{username}/usernameinfo/")
+            return str(result["user"]["pk"])
+
+        user_id = self._with_relogin(_fetch)
         self._user_id_cache[username] = user_id
         self.rate_limiter.record_request()
         logger.info("Resolved user ID", username=username, user_id=user_id)
@@ -136,34 +221,60 @@ class InstagramClient:
 
     def get_user_stories(self, user_id: str) -> list[Story]:
         self.ensure_logged_in()
-        
+
         if not self.rate_limiter.can_make_request():
             raise InstagramRateLimitError("Request limit reached")
 
         self.rate_limiter.wait_between_requests()
-        stories = self._client.user_stories(user_id)
+
+        def _fetch() -> list[Story]:
+            return self._client.user_stories(user_id)
+
+        stories = self._with_relogin(_fetch)
         self.rate_limiter.record_request()
         return stories
 
     def get_user_medias(self, user_id: str, amount: int = 20) -> list[Media]:
         self.ensure_logged_in()
-        
+
         if not self.rate_limiter.can_make_request():
             raise InstagramRateLimitError("Request limit reached")
 
         self.rate_limiter.wait_between_requests()
-        medias = self._client.user_medias(user_id, amount=amount)
+
+        def _fetch() -> list[Media]:
+            # Try GraphQL first if available, fall back to private API
+            if self._is_graphql_available():
+                try:
+                    medias = self._client.user_medias(user_id, amount=amount)
+                    self._reset_graphql_failures()
+                    return medias
+                except KeyError as e:
+                    if "data" in str(e):
+                        logger.debug("GraphQL response invalid, using private API")
+                        self._handle_graphql_error()
+                    else:
+                        raise
+
+            # Use private API directly
+            return self._client.user_medias_v1(user_id, amount=amount)
+
+        medias = self._with_relogin(_fetch)
         self.rate_limiter.record_request()
         return medias
 
     def like_story(self, story_id: str, story_pk: str) -> bool:
         self.ensure_logged_in()
-        
+
         if not self.rate_limiter.can_like():
             raise InstagramRateLimitError("Like limit reached")
 
         self.rate_limiter.wait_between_likes()
-        result = self._client.story_like(story_pk)
+
+        def _like() -> bool:
+            return self._client.story_like(story_pk)
+
+        result = self._with_relogin(_like)
         self.rate_limiter.record_like()
         self.rate_limiter.record_request()
         self._save_session()
@@ -172,12 +283,16 @@ class InstagramClient:
 
     def like_media(self, media_id: str) -> bool:
         self.ensure_logged_in()
-        
+
         if not self.rate_limiter.can_like():
             raise InstagramRateLimitError("Like limit reached")
 
         self.rate_limiter.wait_between_likes()
-        result = self._client.media_like(media_id)
+
+        def _like() -> bool:
+            return self._client.media_like(media_id)
+
+        result = self._with_relogin(_like)
         self.rate_limiter.record_like()
         self.rate_limiter.record_request()
         self._save_session()
@@ -187,9 +302,16 @@ class InstagramClient:
     def keep_alive(self) -> bool:
         self.ensure_logged_in()
         try:
-            self._client.get_timeline_feed()
+            def _ping() -> bool:
+                self._client.get_timeline_feed()
+                return True
+
+            self._with_relogin(_ping)
             self._save_session()
             return True
+        except InstagramLoginError:
+            logger.error("Keep-alive failed: session expired and relogin failed")
+            return False
         except Exception as e:
             logger.warning("Keep-alive failed", error=str(e))
             return False

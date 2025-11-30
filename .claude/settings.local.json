@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest:*)",
+      "Bash(uv run python:*)",
+      "Bash(pip show:*)",
+      "Bash(python:*)",
+      "Bash(set:*)",
+      "Bash($env:PYTHONPATH=\"src\")",
+      "Bash(code:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

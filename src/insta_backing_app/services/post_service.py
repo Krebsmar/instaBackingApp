@@ -2,6 +2,8 @@
 
 from datetime import datetime, timezone
 
+from pydantic import ValidationError
+
 from insta_backing_app.config import get_settings
 from insta_backing_app.logging_config import get_logger
 from insta_backing_app.models import Post, get_db_session
@@ -25,15 +27,23 @@ class PostService:
         """Get repository with fresh DB session."""
         return PostRepository(get_db_session())
 
+    def _is_first_sync(self, username: str, repo: PostRepository) -> bool:
+        """Check if this is the first sync for a user (no posts in DB yet)."""
+        return not repo.has_posts_for_user(username)
+
     def process_posts(self, username: str, user_id: str) -> dict:
         """Process posts for a user. Returns stats."""
-        stats = {"fetched": 0, "new": 0, "liked": 0, "skipped": 0, "errors": 0}
-        
+        stats = {"fetched": 0, "new": 0, "liked": 0, "skipped": 0, "errors": 0, "stored": 0}
+
         logger.info("Processing posts", username=username)
-        
+
         try:
             medias = self.client.get_user_medias(user_id, self.settings.ig_posts_amount)
             stats["fetched"] = len(medias)
+        except ValidationError as e:
+            # Pydantic parsing error (often with Reels)
+            logger.warning("Skipping media fetch due to parsing error", username=username, media_type="unknown")
+            return stats
         except InstagramRateLimitError:
             logger.warning("Rate limit reached while fetching posts", username=username)
             return stats
@@ -47,10 +57,19 @@ class PostService:
             return stats
 
         repo = self._get_repo()
+        first_sync = self._is_first_sync(username, repo)
+
+        if first_sync:
+            logger.info("Initial sync: storing existing posts without liking", username=username, count=len(medias))
 
         for media in medias:
-            media_pk = str(media.pk)
-            
+            try:
+                media_pk = str(media.pk)
+            except (ValidationError, AttributeError) as e:
+                media_type_str = getattr(media, "media_type", "unknown")
+                logger.warning("Skipping media due to parsing error", media_type=media_type_str)
+                continue
+
             # Check if already processed
             if repo.exists(media_pk):
                 logger.debug("Post already processed", media_pk=media_pk)
@@ -64,6 +83,9 @@ class PostService:
             if hasattr(media, "product_type"):
                 product_type = media.product_type
 
+            # Check if already liked on Instagram
+            already_liked = getattr(media, "has_liked", False)
+
             # Create record first
             post_record = Post(
                 media_pk=media_pk,
@@ -72,10 +94,15 @@ class PostService:
                 product_type=product_type,
                 target_username=username,
                 taken_at=media.taken_at or datetime.now(timezone.utc),
-                liked=False,
+                liked=already_liked or first_sync,  # Mark as liked if first sync or already liked
                 caption_text=media.caption_text[:500] if media.caption_text else None,
             )
             repo.create(post_record)
+
+            # Skip liking on first sync or if already liked
+            if first_sync or already_liked:
+                stats["stored"] += 1
+                continue
 
             # Try to like
             try:
@@ -83,13 +110,13 @@ class PostService:
                 if success:
                     repo.mark_as_liked(media_pk)
                     stats["liked"] += 1
-                    
+
                     media_type_name = {1: "Photo", 2: "Video", 8: "Album"}.get(
                         media.media_type, "Unknown"
                     )
                     if product_type == "clips":
                         media_type_name = "Reel"
-                    
+
                     logger.info(
                         "Post liked",
                         username=username,

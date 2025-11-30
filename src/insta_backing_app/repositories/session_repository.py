@@ -62,3 +62,17 @@ class SessionRepository:
         if session_data:
             self.db.delete(session_data)
             self.db.commit()
+
+    def invalidate(self, username: str) -> None:
+        """Mark session as invalid."""
+        session_data = self.get_by_username(username)
+        if session_data:
+            session_data.is_valid = False
+            self.db.commit()
+
+    def get_valid_session(self, username: str) -> SessionData | None:
+        """Get session only if it's marked as valid (or is_valid is None for legacy data)."""
+        session_data = self.get_by_username(username)
+        if session_data and session_data.is_valid is not False:
+            return session_data
+        return None
