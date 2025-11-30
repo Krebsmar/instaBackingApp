@@ -66,11 +66,10 @@ def configure_logging() -> None:
     # Silence noisy loggers
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("instagrapi").setLevel(logging.ERROR)
-    logging.getLogger("pydantic").setLevel(logging.ERROR)
-    # Silence instagrapi's request loggers (they log massive HTML dumps)
-    logging.getLogger("private_request").setLevel(logging.ERROR)
-    logging.getLogger("public_request").setLevel(logging.ERROR)
+    # Completely disable instagrapi and pydantic loggers (they spam HTML dumps and validation errors)
+    for logger_name in ["instagrapi", "pydantic", "private_request", "public_request"]:
+        noisy_logger = logging.getLogger(logger_name)
+        noisy_logger.disabled = True
 
 
 def get_logger(name: str) -> Any:

@@ -58,10 +58,10 @@ class InstagramClient:
     def _create_client(self) -> Client:
         client = Client()
         client.delay_range = [1, 3]
-        # Silence instagrapi's verbose request loggers
-        client.logger.setLevel(logging.ERROR)
-        client.private_request_logger.setLevel(logging.ERROR)
-        client.public_request_logger.setLevel(logging.ERROR)
+        # Completely disable instagrapi's verbose loggers (they spam HTML dumps)
+        client.logger.disabled = True
+        client.private_request_logger.disabled = True
+        client.public_request_logger.disabled = True
         return client
 
     def _load_session(self) -> bool:
