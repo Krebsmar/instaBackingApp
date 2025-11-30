@@ -40,15 +40,16 @@ class PostService:
         try:
             medias = self.client.get_user_medias(user_id, self.settings.ig_posts_amount)
             stats["fetched"] = len(medias)
-        except ValidationError as e:
+            logger.info("Fetched posts", username=username, count=len(medias))
+        except ValidationError:
             # Pydantic parsing error (often with Reels)
-            logger.warning("Skipping media fetch due to parsing error", username=username, media_type="unknown")
+            logger.warning("Skipping media fetch due to parsing error", username=username)
             return stats
         except InstagramRateLimitError:
             logger.warning("Rate limit reached while fetching posts", username=username)
             return stats
         except Exception as e:
-            logger.error("Failed to fetch posts", username=username, error=str(e))
+            logger.error("Failed to fetch posts", username=username, error=str(e), error_type=type(e).__name__)
             stats["errors"] += 1
             return stats
 
